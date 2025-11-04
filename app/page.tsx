@@ -499,6 +499,7 @@ function MarketCard({ title, market, onChange }: { title: string; market: DualMa
   // Predict prices
   const [pYes, setPYes] = useState<number>(market.type === 'predict' ? ((market as any).yesPrice ?? 0.5) : 0.5);
   const [pNo, setPNo] = useState<number>(market.type === 'predict' ? ((market as any).noPrice ?? 0.5) : 0.5);
+  const [linkComplement, setLinkComplement] = useState<boolean>(true); // 联动 NO = 1 - YES
   // Book odds
   const [oYes, setOYes] = useState<string | number>(market.type === 'book' ? ((market as any).yesOdds ?? 1.8) : 1.8);
   const [oNo, setONo] = useState<string | number>(market.type === 'book' ? ((market as any).noOdds ?? 2.2) : 2.2);
@@ -528,6 +529,8 @@ function MarketCard({ title, market, onChange }: { title: string; market: DualMa
     }
   }, [market]);
 
+  const round4 = (n: number) => Number((n ?? 0).toFixed(4));
+
   return (
     <Card className="glass card-hover-lift">
       <CardHeader>
@@ -552,14 +555,20 @@ function MarketCard({ title, market, onChange }: { title: string; market: DualMa
         </div>
 
         {kind === 'predict' ? (
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-2">
-              <Label className="flex items-center gap-2">YES 价格 P <span className="tag-yes">YES</span></Label>
-              <Input type="number" inputMode="decimal" step="0.001" value={pYes} onChange={(e) => { const v = Number(e.target.value || 0); setPYes(v); applyPredict(v, pNo); }} />
+          <div className="space-y-2">
+            <div className="flex items-center justify-end gap-2 text-xs opacity-70">
+              <span>联动 NO = 1 − YES</span>
+              <Switch checked={linkComplement} onCheckedChange={(v) => { setLinkComplement(v); if (v) { const newNo = round4(1 - pYes); setPNo(newNo); applyPredict(pYes, newNo); } }} />
             </div>
-            <div className="space-y-2">
-              <Label className="flex items-center gap-2">NO 价格 P <span className="tag-no">NO</span></Label>
-              <Input type="number" inputMode="decimal" step="0.001" value={pNo} onChange={(e) => { const v = Number(e.target.value || 0); setPNo(v); applyPredict(pYes, v); }} />
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-2">
+                <Label className="flex items-center gap-2">YES 价格 P <span className="tag-yes">YES</span></Label>
+                <Input type="number" inputMode="decimal" step="0.001" value={pYes} onChange={(e) => { const v = Number(e.target.value || 0); setPYes(v); const nextNo = linkComplement ? round4(1 - v) : pNo; if (linkComplement) setPNo(nextNo); applyPredict(v, nextNo); }} />
+              </div>
+              <div className="space-y-2">
+                <Label className="flex items-center gap-2">NO 价格 P <span className="tag-no">NO</span></Label>
+                <Input disabled={linkComplement} type="number" inputMode="decimal" step="0.001" value={pNo} onChange={(e) => { const v = Number(e.target.value || 0); setPNo(v); const nextYes = linkComplement ? round4(1 - v) : pYes; if (linkComplement) setPYes(nextYes); applyPredict(nextYes, v); }} />
+              </div>
             </div>
           </div>
         ) : (
