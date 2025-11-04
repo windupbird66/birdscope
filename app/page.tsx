@@ -136,6 +136,53 @@ export default function Home() {
     return result.graph.map(g => ({ y: g.y, p: Math.min(g.profitA, g.profitB) }));
   }, [result]);
 
+  // Outcome breakdown at current y
+  const breakdown = useMemo(() => {
+    if (!result || activeY == null) return null;
+    const yv = activeY;
+    const B = budget;
+    if (result.type === 'Cross-Market' && (result as any).inputsUsed?.P) {
+      const P = (result as any).inputsUsed.P as number;
+      const O = (result as any).inputsUsed.O as number;
+      const c = fees.bookWinFee ?? 0;
+      const f = fees.polyWinFee ?? 0;
+      const stakeA = yv * B; // predict spend
+      const stakeB = (1 - yv) * B; // book stake
+      const polyWinMult = (1 - f) * (1 / P - 1);
+      const bookWinMult = (1 - c) * (O - 1);
+      const payoutYes = stakeA / P;
+      const polyProfitYes = stakeA * polyWinMult;
+      const yes = {
+        payout: payoutYes,
+        legAProfit: polyProfitYes,
+        legBProfit: -stakeB,
+        net: polyProfitYes - stakeB,
+      };
+      const payoutNo = stakeB * O; // stake + profit on book
+      const bookProfitNo = stakeB * bookWinMult;
+      const no = {
+        payout: payoutNo,
+        legAProfit: -stakeA,
+        legBProfit: bookProfitNo,
+        net: bookProfitNo - stakeA,
+      };
+      return { yes, no };
+    }
+    if (result.type === 'Book-Book' && (result as any).inputsUsed?.O1) {
+      const O1 = (result as any).inputsUsed.O1 as number;
+      const O2 = (result as any).inputsUsed.O2 as number;
+      const c = fees.bookWinFee ?? 0;
+      const stakeA = yv * B;
+      const stakeB = (1 - yv) * B;
+      const win1 = (1 - c) * (O1 - 1) * stakeA; // profit when outcome A
+      const win2 = (1 - c) * (O2 - 1) * stakeB; // profit when outcome B
+      const yes = { payout: stakeA * O1, legAProfit: win1, legBProfit: -stakeB, net: win1 - stakeB };
+      const no = { payout: stakeB * O2, legAProfit: -stakeA, legBProfit: win2, net: win2 - stakeA };
+      return { yes, no };
+    }
+    return null;
+  }, [result, activeY, budget, fees]);
+
   return (
     <div className="min-h-screen w-full bg-background text-foreground relative">
       <div className="absolute inset-0 grid-overlay" />
@@ -367,6 +414,28 @@ export default function Home() {
               )}
               <KV label="回款A/B" value={result?.return_if_A ? `${result.return_if_A} / ${result.return_if_B}` : '-'} />
               {result?.message && <div className="text-xs text-red-500">{result.message}</div>}
+              {breakdown && (
+                <div className="mt-3 space-y-1">
+                  <div className="opacity-70">收益拆解（当前 y）</div>
+                  <div className="grid grid-cols-2 gap-3 text-xs">
+                    <div>
+                      <div className="font-medium mb-1">若 {result.type === 'Cross-Market' ? (result.inputsUsed as any).predSide : 'A'} 方向成立</div>
+                      <div>胜方回款：${money(breakdown.yes.payout)}</div>
+                      <div>胜方利润：${money(breakdown.yes.legAProfit)}</div>
+                      <div>对手亏损：${money(breakdown.yes.legBProfit)}</div>
+                      <div className="font-medium">净利润：${money(breakdown.yes.net)}</div>
+                    </div>
+                    <div>
+                      <div className="font-medium mb-1">若 {result.type === 'Cross-Market' ? (result.inputsUsed as any).bookSide : 'B'} 方向成立</div>
+                      <div>胜方回款：${money(breakdown.no.payout)}</div>
+                      <div>胜方利润：${money(breakdown.no.legBProfit)}</div>
+                      <div>对手亏损：${money(breakdown.no.legAProfit)}</div>
+                      <div className="font-medium">净利润：${money(breakdown.no.net)}</div>
+                    </div>
+                  </div>
+                  <div className="text-[11px] opacity-60">说明：预测市场“回款”= 份数 × $1；“胜方利润”已扣手续费；“对手亏损”为另一侧本金损失。两边相抵后为净利润。</div>
+                </div>
+              )}
             </CardContent>
           </Card>
 
